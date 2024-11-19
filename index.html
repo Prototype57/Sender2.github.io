@@ -8,7 +8,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #72e9f8, #056c64);
+            background: linear-gradient(135deg, #e0f7fa, #b2dfdb);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -98,6 +98,12 @@
             position: absolute;
             font-weight: bold;
         }
+
+        .validation-error {
+            color: red;
+            font-size: 0.9rem;
+            margin-top: -8px;
+        }
     </style>
 </head>
 <body>
@@ -108,6 +114,7 @@
             <h2>Upload New Files</h2>
             <input type="text" id="senderName" placeholder="Enter your name">
             <input type="file" id="fileInput" multiple>
+            <div class="validation-error" id="validationMessage"></div>
             <button onclick="uploadFile()"><i class="fas fa-upload"></i> Upload File</button>
 
             <div class="progress-circle" id="progressCircle" style="--progress: 0deg;">
@@ -129,6 +136,7 @@
         const senderNameInput = document.getElementById('senderName');
         const progressCircle = document.getElementById('progressCircle');
         const progressText = document.getElementById('progressText');
+        const validationMessage = document.getElementById('validationMessage');
 
         const CLIENT_ID = "874922187178-fptorkdo5dgnppoad0lf2dmr1q5hbvrd.apps.googleusercontent.com";
         const CLIENT_SECRET = "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";
@@ -163,62 +171,66 @@
         }
 
         async function uploadFile() {
-            const senderName = senderNameInput.value.trim();
-            if (!senderName) {
-                alert("Please enter your name!");
-                return;
+    const senderName = senderNameInput.value.trim();
+    if (!senderName) {
+        validationMessage.textContent = "Please enter your name!";
+        return;
+    }
+
+    const files = fileInput.files;
+    if (files.length === 0) {
+        validationMessage.textContent = "Please select a file!";
+        return;
+    }
+
+    validationMessage.textContent = ""; // Clear previous error messages
+
+    const accessToken = await getAccessToken();
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const metadata = {
+            name: `${senderName}_${file.name}`,
+            parents: ["root"]  // You can specify a folder ID here if needed
+        };
+
+        const formData = new FormData();
+        formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+        formData.append("file", file);
+
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.onprogress = function(event) {
+            const progress = Math.round((event.loaded / event.total) * 100);
+            updateProgress(progress);
+        };
+
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                const result = JSON.parse(xhr.responseText);
+                alert(`File ${result.name} uploaded successfully by ${senderName}!`);
+                displayFiles([{ name: result.name, size: file.size }]);
+                
+                // Clear inputs after successful upload
+                senderNameInput.value = "";
+                fileInput.value = "";
+            } else {
+                alert(`Failed to upload file: ${xhr.statusText}`);
             }
+            resetProgress();
+        };
 
-            const files = fileInput.files;
-            if (files.length === 0) {
-                alert("Please select a file!");
-                return;
-            }
+        xhr.onerror = function() {
+            alert("Error uploading the file.");
+            resetProgress();
+        };
 
-            const accessToken = await getAccessToken();
+        xhr.open("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", true);
+        xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+        xhr.send(formData);
+    }
+}
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const metadata = {
-                    name: `${senderName}_${file.name}`,
-                    parents: ["root"]
-                };
-
-                const formData = new FormData();
-                formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-                formData.append("file", file);
-
-                const xhr = new XMLHttpRequest();
-
-                xhr.upload.onprogress = function(event) {
-                    const progress = Math.round((event.loaded / event.total) * 100);
-                    updateProgress(progress);
-                };
-
-                xhr.onload = function() {
-                    if (xhr.status === 200) {
-                        const result = JSON.parse(xhr.responseText);
-                        alert(`File ${result.name} uploaded successfully by ${senderName}!`);
-                        displayFiles([{ name: result.name, size: file.size }]);
-                    } else {
-                        alert(`Failed to upload file: ${xhr.statusText}`);
-                    }
-                    resetProgress();
-                };
-
-                xhr.onerror = function() {
-                    alert("Error uploading the file.");
-                    resetProgress();
-                };
-
-                xhr.open("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", true);
-                xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
-                xhr.send(formData);
-            }
-
-            // Clear the file input after successful upload
-            fileInput.value = "";
-        }
 
         function displayFiles(files) {
             files.forEach(file => {
@@ -231,6 +243,8 @@
                 fileList.appendChild(fileDiv);
             });
         }
+
+        
     </script>
     <script>
         // Disable right-click
